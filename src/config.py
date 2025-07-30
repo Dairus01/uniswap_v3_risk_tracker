@@ -40,3 +40,27 @@ PREDEFINED_ABIS = {
 REDIS_HOST = os.getenv("REDIS_HOST")
 REDIS_PORT = os.getenv("REDIS_PORT")
 REDIS_DB = os.getenv("REDIS_DB")
+
+
+# Risk Config
+RISK_CONFIG = {
+    # Volatility calculation
+    "volatility_decay": 0.94,  # EWMA decay factor
+    # VaR parameters
+    "liquidity_scale": 0.8,  # Scaling factor for liquidity adjustment
+    "var_confidence_z": 1.65,  # Z-score for 95% confidence
+    # CVaR adjustment
+    "cvar_z_adjustment": 2.06,  # Z for 98% confidence
+    # Risk scoring weights
+    "risk_weights": {
+        "volatility": 0.3,
+        "var": 0.3,
+        "il_risk": 0.25,
+        "liquidity_depth": 0.15,
+    },
+    # Normalization bounds
+    "max_volatility": 50.0,  # 50% max volatility for normalization
+    "max_var": 0.3,  # 30% of TVL max VaR
+    # Liquidity depth scaling
+    "volume_scale": 0.05,  # Volume-to-liquidity ratio scaling
+}
