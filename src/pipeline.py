@@ -136,11 +136,3 @@ class UniswapDataFetcher:
         return processed
     
     
-if __name__ == "__main__":
-    async def main():
-        async with UniswapDataFetcher() as fetcher:
-            result = await fetcher.fetch_all_pools()
-            print("\nParsed Result:")
-            print(result)
-
-    asyncio.run(main())
