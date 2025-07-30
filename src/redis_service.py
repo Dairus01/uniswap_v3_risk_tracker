@@ -121,11 +121,3 @@ class RedisService:
             self.client.close()
 
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-
-    redis_service = RedisService()
-    if redis_service.is_connected():
-        print("✅ Redis is connected.")
-    else:
-        print("❌ Redis is not connected. Using fallback.")
