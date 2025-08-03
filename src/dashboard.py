@@ -30,7 +30,7 @@ def main():
 
     refresh_interval = st.sidebar.slider(
         label="Refresh interval (seconds)",
-        min_value=5,
+        min_value=60,
         max_value=300,
         value=15,
         key="refresh_interval",
@@ -76,7 +76,7 @@ def main():
                             value=f"${tvl/1e6:,.2f}M",
                         )
                         st.metric(
-                            label="5-min Volatility",
+                            label=f"{refresh_interval} seconds: TVL Volatility",
                             value=f"{volatility:.2f}%",
                             help="Volatility of TVL over 5-minute windows",
                         )
