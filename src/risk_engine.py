@@ -39,29 +39,28 @@ class RiskEngine:
         return volatility * 100
 
     def interpret_capital_efficiency(
-            self, 
-            symbol: str, 
-            current_tvl: float, 
-            volume: float
-        ) -> str:
+        self, symbol: str, current_tvl: float, volume: float
+    ) -> str:
         capital_efficiency = volume / current_tvl
-        
-        if capital_efficiency >= 0.5:    
+
+        if capital_efficiency >= 0.5:
             return "██████████ (Elite)"
-        elif capital_efficiency >= 0.1:  
+        elif capital_efficiency >= 0.1:
             return "█████████░ (High)"
-        elif capital_efficiency >= 0.03: 
+        elif capital_efficiency >= 0.03:
             return "████████░░ (Strong)"
         elif capital_efficiency >= 0.01:
             return "██████░░░░ (Medium)"
         elif capital_efficiency >= 0.003:
             return "████░░░░░░ (Low)"
-        elif capital_efficiency >= 1e-4: 
+        elif capital_efficiency >= 1e-4:
             return "██░░░░░░░░ (Very Low)"
-        else:                           
+        else:
             return "░░░░░░░░░░ (Idle)"
-        
-    def calculate_fee_income_risk(self, volume: float, tvl: float, fee_tier: float) -> dict:
+
+    def calculate_fee_income_risk(
+        self, volume: float, tvl: float, fee_tier: float
+    ) -> dict:
         daily_fees = volume * (fee_tier / 100)
         annual_fees = daily_fees * 365
 
@@ -94,5 +93,3 @@ class RiskEngine:
                 "description": "❌ Barely any fees — not viable for LPs",
                 "color": "#e74c3c",  # red
             }
-
-        
