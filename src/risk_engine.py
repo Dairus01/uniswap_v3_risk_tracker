@@ -37,3 +37,62 @@ class RiskEngine:
             volatility = 0
         self.redis.set(prev_key, current_tvl)
         return volatility * 100
+
+    def interpret_capital_efficiency(
+            self, 
+            symbol: str, 
+            current_tvl: float, 
+            volume: float
+        ) -> str:
+        capital_efficiency = volume / current_tvl
+        
+        if capital_efficiency >= 0.5:    
+            return "██████████ (Elite)"
+        elif capital_efficiency >= 0.1:  
+            return "█████████░ (High)"
+        elif capital_efficiency >= 0.03: 
+            return "████████░░ (Strong)"
+        elif capital_efficiency >= 0.01:
+            return "██████░░░░ (Medium)"
+        elif capital_efficiency >= 0.003:
+            return "████░░░░░░ (Low)"
+        elif capital_efficiency >= 1e-4: 
+            return "██░░░░░░░░ (Very Low)"
+        else:                           
+            return "░░░░░░░░░░ (Idle)"
+        
+    def calculate_fee_income_risk(self, volume: float, tvl: float, fee_tier: float) -> dict:
+        daily_fees = volume * (fee_tier / 100)
+        annual_fees = daily_fees * 365
+
+        apr = annual_fees / tvl
+        if apr >= 0.10:
+            return {
+                "apr": f"{apr:.2%}",
+                "risk_level": "🟢 Low Risk",
+                "description": "💰 Strong fee generation — attractive for LPs",
+                "color": "#2ecc71",  # green
+            }
+        elif apr >= 0.05:
+            return {
+                "apr": f"{apr:.2%}",
+                "risk_level": "🟡 Medium Risk",
+                "description": "📊 Moderate fees — sustainable but not aggressive",
+                "color": "#f39c12",  # orange
+            }
+        elif apr >= 0.02:
+            return {
+                "apr": f"{apr:.2%}",
+                "risk_level": "🟠 High Risk",
+                "description": "⚠️ Marginal income — LPs may hesitate",
+                "color": "#e67e22",  # darker orange
+            }
+        else:
+            return {
+                "apr": f"{apr:.2%}",
+                "risk_level": "🔴 Severe Risk",
+                "description": "❌ Barely any fees — not viable for LPs",
+                "color": "#e74c3c",  # red
+            }
+
+        
