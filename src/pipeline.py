@@ -120,7 +120,6 @@ class UniswapDataFetcher:
         processed = {}
 
         for symbol, result in zip(self.pools.keys(), results):
-
             if not result:
                 self.logger.warning(f"result unfetched for pool {symbol}")
                 continue
