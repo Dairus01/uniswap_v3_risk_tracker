@@ -32,7 +32,7 @@ def main():
         label="Refresh interval (seconds)",
         min_value=60,
         max_value=300,
-        value=15,
+        value=60,
         key="refresh_interval",
     )
 
@@ -55,11 +55,24 @@ def main():
                 return
 
             volatility_data = {}
+            capital_efficiency_data = {}
+            apr_data = {}
+
             for symbol, pool_data in data.items():
                 volatility = risk_engine.calculate_tvl_volatility(
                     symbol, pool_data.get("tvl", 0)
                 )
+                capital_efficiency = risk_engine.interpret_capital_efficiency(
+                    symbol, pool_data.get("tvl", 0), pool_data.get("volume", 0)
+                )
+                apr_insight = risk_engine.calculate_fee_income_risk(
+                    pool_data.get("volume", 0),
+                    pool_data.get("tvl", 0),
+                    pool_data.get("fee_tier", 0),
+                )
+                capital_efficiency_data[symbol] = capital_efficiency
                 volatility_data[symbol] = volatility
+                apr_data[symbol] = apr_insight
 
             with data_placeholder.container():
                 st.subheader("Current Pool TVL")
@@ -68,7 +81,8 @@ def main():
                 for (symbol, pool_data), col in zip(data.items(), cols):
                     tvl = pool_data.get("tvl", 0)
                     volatility = volatility_data[symbol]
-
+                    capital_efficiency = capital_efficiency_data[symbol]
+                    apr_insight = apr_data[symbol]
                     with col:
                         st.markdown(f"**{symbol} Pool**")
                         st.metric(
@@ -80,7 +94,18 @@ def main():
                             value=f"{volatility:.2f}%",
                             help="Volatility of TVL over 5-minute windows",
                         )
-
+                        st.markdown(f"**Capital Efficiency**: {capital_efficiency}")
+                        st.markdown("### Fee Income Risk")
+                        st.metric(label="Projected Fee APR", value=apr_insight["apr"])
+                        st.markdown(
+                            f"""
+                                <div style='padding: 0.75em; background-color: {apr_insight["color"]}; color: white; border-radius: 10px;'>
+                                    <strong>{apr_insight["risk_level"]}</strong><br>
+                                    {apr_insight["description"]}
+                                </div>
+                                """,
+                            unsafe_allow_html=True,
+                        )
                 timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
                 last_update.caption(f"Last updated: {timestamp}")
 
