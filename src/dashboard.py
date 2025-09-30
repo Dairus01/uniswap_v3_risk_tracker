@@ -891,7 +891,6 @@ def get_pool_data(mode, min_tvl, max_pools, risk_filter, force_refresh=False):
         data = asyncio.run(fetch_pool_data())
 
 
-
         if not data:
             return None, None
 
