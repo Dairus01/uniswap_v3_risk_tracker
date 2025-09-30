@@ -9,15 +9,27 @@ from config import REDIS_HOST, REDIS_PORT, REDIS_DB
 class RedisService:
 
     def __init__(self, host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB):
-        self.host = host
-        self.port = port
-        self.db = db
+        # Sanitize env-derived values; Streamlit Cloud may not provide Redis
+        self.host = host if host else None
+        try:
+            self.port = int(port) if port not in (None, "") else None
+        except (TypeError, ValueError):
+            self.port = None
+        try:
+            self.db = int(db) if db not in (None, "") else None
+        except (TypeError, ValueError):
+            self.db = None
         self.client = None
         self.logger = logging.getLogger("RedisService")
         self._fallback_cache = {}
         self.connect()
 
     def connect(self):
+        # If Redis settings are missing, operate in in-memory fallback mode
+        if not (self.host and self.port is not None and self.db is not None):
+            self.logger.info("Redis not configured; using in-memory fallback cache")
+            self.client = None
+            return
         try:
             self.client = redis.Redis(
                 host=self.host,
