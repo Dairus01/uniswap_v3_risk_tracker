@@ -19,7 +19,13 @@ class UniswapDataFetcher:
         chainlink_address=CHAINLINK_ETH_USD,
         use_dynamic_discovery=True,
     ):
-        self.w3 = Web3(Web3.HTTPProvider(infura_url))
+        # Initialize Web3 if an endpoint is provided; otherwise operate subgraph-only
+        self.w3 = None
+        if infura_url:
+            try:
+                self.w3 = Web3(Web3.HTTPProvider(infura_url))
+            except Exception:
+                self.w3 = None
         self.subgraph_url = subgraph_url
         self.abis = abis
         self.pools = pools or LEGACY_POOLS  # Fallback to legacy pools
@@ -44,8 +50,10 @@ class UniswapDataFetcher:
             if use_dynamic_discovery:
                 self.logger.warning("Dynamic discovery disabled - subgraph not configured")
 
-        if not self.w3.is_connected():
-            raise ConnectionError("Failed to connect to ethereum node")
+        # Web3 is optional for the current app flow; proceed if unavailable
+        if self.w3 is not None and not self.w3.is_connected():
+            self.logger.warning("Web3 not connected; continuing with subgraph-only data")
+            self.w3 = None
 
     def _load_abi(self, address=None):
         if address is not None:
