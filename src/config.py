@@ -9,12 +9,33 @@ INFURA_URL = os.getenv("INFURA_URL")
 # SUBGRAPH CONNECTIONS
 subgraph_api_key = os.getenv("subgraph_api_key")
 subgraph_id = os.getenv("subgraph_id")
-SUBGRAPH_URL = (
+
+# Working Uniswap V3 subgraph via Gateway API
+# This is the current working endpoint for Uniswap V3 data
+UNISWAP_V3_SUBGRAPH_URL = (
     f"https://gateway.thegraph.com/api/{subgraph_api_key}/subgraphs/id/{subgraph_id}"
+    if subgraph_api_key and subgraph_id else None
 )
 
-# Target pools (USDC/ETH, WBTC/ETH, LINK/ETH)
-POOLS = {
+# Use working Gateway API by default
+SUBGRAPH_URL = UNISWAP_V3_SUBGRAPH_URL
+
+# Add validation
+if not SUBGRAPH_URL:
+    print("WARNING: Subgraph configuration missing. Please set subgraph_api_key and subgraph_id in .env file")
+    print("Dynamic pool discovery will not work without proper subgraph configuration.")
+
+# Dynamic Pool Discovery Configuration
+POOL_DISCOVERY_CONFIG = {
+    "min_tvl_usd": 10000,  # Minimum TVL threshold ($10k)
+    "min_tx_count": 100,   # Minimum transaction count
+    "max_pools": 1000,     # Maximum pools to analyze
+    "batch_size": 1000,    # Batch size for pagination
+    "update_interval": 300, # Pool discovery update interval (seconds)
+}
+
+# Legacy pools for backward compatibility (will be replaced by dynamic discovery)
+LEGACY_POOLS = {
     "USDC_ETH": "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8",
     "WBTC_ETH": "0xcbcdf9626bc03e24f779434178a73a0b4bad62ed",
     "LINK_ETH": "0xa6cc3c2531fdaa6ae1a3ca84c2855806728693e8",
@@ -51,16 +72,33 @@ RISK_CONFIG = {
     "var_confidence_z": 1.65,  # Z-score for 95% confidence
     # CVaR adjustment
     "cvar_z_adjustment": 2.06,  # Z for 98% confidence
-    # Risk scoring weights
+    # Advanced risk scoring weights
     "risk_weights": {
-        "volatility": 0.3,
-        "var": 0.3,
-        "il_risk": 0.25,
-        "liquidity_depth": 0.15,
+        "liquidity_risk": 0.25,      # TVL volatility, concentration
+        "market_risk": 0.30,          # Price impact, impermanent loss
+        "operational_risk": 0.20,     # Fee efficiency, transaction frequency
+        "systemic_risk": 0.25,        # Token correlation, ecosystem health
     },
     # Normalization bounds
     "max_volatility": 50.0,  # 50% max volatility for normalization
     "max_var": 0.3,  # 30% of TVL max VaR
     # Liquidity depth scaling
     "volume_scale": 0.05,  # Volume-to-liquidity ratio scaling
+    # Advanced risk thresholds
+    "risk_thresholds": {
+        "low_risk": 0.3,      # Green zone
+        "medium_risk": 0.6,    # Yellow zone
+        "high_risk": 0.8,      # Orange zone
+        "critical_risk": 1.0,  # Red zone
+    },
+    # Impermanent loss calculation
+    "il_calculation": {
+        "price_volatility_window": 7,  # Days for price volatility
+        "correlation_threshold": 0.7,  # Token correlation threshold
+    },
+    # Price impact calculation
+    "price_impact": {
+        "trade_size_threshold": 0.01,  # 1% of pool liquidity
+        "impact_threshold": 0.05,      # 5% price impact threshold
+    },
 }
