@@ -42,7 +42,7 @@ graph TB
     D --> E[Redis Cache]
     E --> F[Streamlit Dashboard]
     
-    G[Uniswap Factory] -->|PoolCreated Events| H[Real-time Monitor]
+    G[Uniswap] -->|PoolCreated Events| H[Real-time Monitor]
     H --> B
     
     I[Infura/Web3] -->|On-chain Data| J[Data Validation]
