@@ -101,14 +101,12 @@ graph TB
 ### Installation
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/Dairus01/uniswap_v3_risk_tracker.git
 cd defi-risk-dashboard
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Start Redis server
-docker run -d -p 6379:6379 redis:latest
 ```
 
 ### Configuration
