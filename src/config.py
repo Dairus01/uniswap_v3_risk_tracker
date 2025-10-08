@@ -34,12 +34,7 @@ POOL_DISCOVERY_CONFIG = {
     "update_interval": 300, # Pool discovery update interval (seconds)
 }
 
-# Legacy pools for backward compatibility (will be replaced by dynamic discovery)
-LEGACY_POOLS = {
-    "USDC_ETH": "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8",
-    "WBTC_ETH": "0xcbcdf9626bc03e24f779434178a73a0b4bad62ed",
-    "LINK_ETH": "0xa6cc3c2531fdaa6ae1a3ca84c2855806728693e8",
-}
+# Legacy pools removed - using dynamic discovery only
 
 # Chainlink ETH/USD price feed
 CHAINLINK_ETH_USD = "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419"

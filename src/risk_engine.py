@@ -5,13 +5,11 @@ import json
 import statistics
 from typing import Dict, List, Optional
 
-from redis_service import RedisService
 from config import RISK_CONFIG
 
 
 class RiskEngine:
-    def __init__(self, redis_service: RedisService = None):
-        self.redis = redis_service or RedisService()
+    def __init__(self):
         self.logger = logging.getLogger("RiskEngine")
         self.config = RISK_CONFIG
         self._init_state()
@@ -23,8 +21,15 @@ class RiskEngine:
         prev_key = f"risk:{symbol}:tvl_prev"
         vol_key = f"risk:{symbol}:tvl_vol"
 
-        prev_tvl = self.redis.get(prev_key)
-        prev_vol = self.redis.get(vol_key) or 0
+        # Use session state instead of Redis
+        import streamlit as st
+        
+        # Initialize session state for risk data if not exists
+        if 'risk_data' not in st.session_state:
+            st.session_state.risk_data = {}
+        
+        prev_tvl = st.session_state.risk_data.get(prev_key)
+        prev_vol = st.session_state.risk_data.get(vol_key, 0)
 
         if prev_tvl and float(prev_tvl) > 0:
             prev_tvl = float(prev_tvl)
@@ -32,12 +37,12 @@ class RiskEngine:
 
             decay = self.config["volatility_decay"]
             new_vol = math.sqrt(decay * returns**2 + (1 - decay) * float(prev_vol) ** 2)
-            self.redis.set(vol_key, new_vol)
+            st.session_state.risk_data[vol_key] = new_vol
             volatility = new_vol
 
         else:
             volatility = 0
-        self.redis.set(prev_key, current_tvl)
+        st.session_state.risk_data[prev_key] = current_tvl
         return volatility * 100
 
     def interpret_capital_efficiency(

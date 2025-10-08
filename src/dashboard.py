@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 import aiohttp
 
 from pipeline import UniswapDataFetcher
-from redis_service import RedisService
+# Redis removed - using Streamlit session state only
 from risk_engine import RiskEngine
 from pool_discovery import DynamicPoolDiscovery
 from config import UNISWAP_V3_SUBGRAPH_URL, POOL_DISCOVERY_CONFIG
@@ -742,49 +742,24 @@ def create_pool_detail_view(selected_pool, pool_data, risk_analysis):
                 )
     
     else:
-        st.warning("⚠️ Unable to fetch historical data. Showing simulated data for demonstration.")
+        st.error("❌ Unable to fetch historical data for this pool. This may be due to:")
+        st.markdown("""
+        - Pool is too new (insufficient historical data)
+        - Subgraph connection issues
+        - Pool data not available in the current time range
         
-        # Fallback to simulated data
-        dates = pd.date_range(start=datetime.now() - timedelta(days=30), end=datetime.now(), freq='D')
+        Please try refreshing the data or selecting a different pool.
+        """)
         
-        # Simulate TVL trend
-        base_tvl = pool_data.get('tvl', 0)
-        tvl_trend = [base_tvl * (1 + 0.1 * (i/len(dates)) + 0.05 * (i % 7 - 3)/7) for i in range(len(dates))]
-        
-        # Simulate volume trend
-        base_volume = pool_data.get('volume', 0)
-        volume_trend = [base_volume * (1 + 0.2 * (i/len(dates)) + 0.1 * (i % 5 - 2)/5) for i in range(len(dates))]
-        
-        # Create historical charts
-        fig_historical = go.Figure()
-        
-        fig_historical.add_trace(go.Scatter(
-            x=dates,
-            y=tvl_trend,
-            mode='lines',
-            name='TVL Trend (Simulated)',
-            line=dict(color='#2ecc71', width=2)
-        ))
-        
-        fig_historical.add_trace(go.Scatter(
-            x=dates,
-            y=volume_trend,
-            mode='lines',
-            name='Volume Trend (Simulated)',
-            line=dict(color='#3498db', width=2),
-            yaxis='y2'
-        ))
-        
-        fig_historical.update_layout(
-            title="30-Day Historical Trends (Simulated Data)",
-            xaxis_title="Date",
-            yaxis=dict(title="TVL ($)", side="left"),
-            yaxis2=dict(title="Volume ($)", side="right", overlaying="y"),
-            height=400,
-            hovermode='x unified'
-        )
-        
-        st.plotly_chart(fig_historical, use_container_width=True)
+        # Show basic pool information instead of simulated data
+        st.info("**Current Pool Data Available:**")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Current TVL", f"${pool_data.get('tvl', 0):,.2f}")
+            st.metric("Current Volume (24h)", f"${pool_data.get('volume', 0):,.2f}")
+        with col2:
+            st.metric("Fee Tier", f"{pool_data.get('fee_tier', 0)*100:.2f}%")
+            st.metric("Liquidity", f"{pool_data.get('liquidity', 0):,.0f}")
     
     # Pool comparison
     st.subheader("Pool Comparison")
@@ -815,8 +790,8 @@ def create_pool_detail_view(selected_pool, pool_data, risk_analysis):
     
 
 
-redis_service = RedisService()
-risk_engine = RiskEngine(redis_service=redis_service)
+# Redis removed - using Streamlit session state only
+risk_engine = RiskEngine()
 
 
 def create_sidebar_navigation():
@@ -874,14 +849,41 @@ def create_sidebar_navigation():
     return st.session_state.page
 
 
-def get_pool_data(mode, min_tvl, max_pools, risk_filter, force_refresh=False):
-    """Fetch and process pool data with caching"""
-    # Check if we have cached data and don't need to refresh
-    cache_key = f"pool_data_{mode}_{min_tvl}_{max_pools}_{hash(tuple(risk_filter))}"
+def should_refresh_data(force_refresh=False):
+    """Check if data should be refreshed based on settings changes or manual refresh"""
+    if force_refresh:
+        return True
     
-    if not force_refresh and 'cached_data' in st.session_state and cache_key in st.session_state.cached_data:
-        cached_data = st.session_state.cached_data[cache_key]
-        return cached_data.get('filtered_data'), cached_data.get('risk_analysis')
+    # Check if this is the first load
+    if 'last_settings' not in st.session_state:
+        return True
+    
+    # Check if settings have changed (excluding time period dropdowns)
+    current_settings = {
+        'mode': st.session_state.get('analysis_mode', 'Dynamic Discovery'),
+        'min_tvl': st.session_state.get('min_tvl', 10000),
+        'max_pools': st.session_state.get('max_pools', 100),
+        'risk_filter': st.session_state.get('risk_levels', ['Low', 'Medium', 'High'])
+        # Note: time period dropdowns are excluded from refresh triggers
+    }
+    
+    if current_settings != st.session_state.last_settings:
+        st.session_state.last_settings = current_settings
+        return True
+    
+    # Check if cache is too old (5 minutes)
+    if 'last_data_fetch' in st.session_state:
+        cache_age = time.time() - st.session_state.last_data_fetch
+        if cache_age > 300:  # 5 minutes
+            return True
+    
+    return False
+
+def get_pool_data(mode, min_tvl, max_pools, risk_filter, force_refresh=False):
+    """Fetch and process pool data with intelligent caching"""
+    # Check if we should refresh data
+    if not should_refresh_data(force_refresh) and 'cached_pool_data' in st.session_state:
+        return st.session_state.cached_pool_data.get('filtered_data'), st.session_state.cached_pool_data.get('risk_analysis')
 
     async def fetch_pool_data():
         async with UniswapDataFetcher(use_dynamic_discovery=(mode == "Dynamic Discovery")) as fetcher:
@@ -892,55 +894,67 @@ def get_pool_data(mode, min_tvl, max_pools, risk_filter, force_refresh=False):
 
 
         if not data:
+            st.error("❌ No pool data available. Please check your subgraph configuration and try again.")
             return None, None
-
-        # Filter pools by TVL
-        filtered_data = {
-            symbol: pool_data for symbol, pool_data in data.items()
-            if pool_data.get("tvl", 0) >= min_tvl
-        }
-        
-        # Limit number of pools
-        if len(filtered_data) > max_pools:
-            sorted_pools = sorted(
-                filtered_data.items(),
-                key=lambda x: x[1].get("tvl", 0),
-                reverse=True
-            )
-            filtered_data = dict(sorted_pools[:max_pools])
-
-        if not filtered_data:
-            return None, None
-
-        # Calculate comprehensive risk analysis
-        risk_engine = RiskEngine()
-        risk_analysis = {}
-        for symbol, pool_data in filtered_data.items():
-            risk_analysis[symbol] = risk_engine.calculate_comprehensive_risk_score(pool_data)
-
-        # Filter by risk level
-        if risk_filter:
-            filtered_data = {
-                symbol: pool_data for symbol, pool_data in filtered_data.items()
-                if risk_analysis[symbol]["risk_level"] in risk_filter
-            }
-            risk_analysis = {k: v for k, v in risk_analysis.items() if k in filtered_data}
-
-        # Cache the data
-        if 'cached_data' not in st.session_state:
-            st.session_state.cached_data = {}
-        
-        st.session_state.cached_data[cache_key] = {
-            'filtered_data': filtered_data,
-            'risk_analysis': risk_analysis,
-            'timestamp': time.time()
-        }
-
-        return filtered_data, risk_analysis
-
-    except Exception as e:
-        logger.error(f"Error fetching pool data: {e}")
+            
+    except RuntimeError as e:
+        st.error(f"❌ Configuration Error: {str(e)}")
+        st.markdown("""
+        **Please check:**
+        - Your subgraph API key and ID are correctly set in Streamlit Secrets
+        - The subgraph is accessible and responding
+        - Your internet connection is stable
+        """)
         return None, None
+    except Exception as e:
+        st.error(f"❌ Unexpected error occurred: {str(e)}")
+        st.markdown("Please try refreshing the data or check the logs for more details.")
+        return None, None
+
+    # Filter pools by TVL
+    filtered_data = {
+        symbol: pool_data for symbol, pool_data in data.items()
+        if pool_data.get("tvl", 0) >= min_tvl
+    }
+    
+    # Limit number of pools
+    if len(filtered_data) > max_pools:
+        sorted_pools = sorted(
+            filtered_data.items(),
+            key=lambda x: x[1].get("tvl", 0),
+            reverse=True
+        )
+        filtered_data = dict(sorted_pools[:max_pools])
+
+    if not filtered_data:
+        st.warning(f"⚠️ No pools found matching your criteria (Min TVL: ${min_tvl:,.0f}). Try lowering the minimum TVL threshold.")
+        return None, None
+
+    # Calculate comprehensive risk analysis
+    risk_engine = RiskEngine()
+    risk_analysis = {}
+    for symbol, pool_data in filtered_data.items():
+        risk_analysis[symbol] = risk_engine.calculate_comprehensive_risk_score(pool_data)
+
+    # Filter by risk level
+    if risk_filter:
+        filtered_data = {
+            symbol: pool_data for symbol, pool_data in filtered_data.items()
+            if risk_analysis[symbol]["risk_level"] in risk_filter
+        }
+        risk_analysis = {k: v for k, v in risk_analysis.items() if k in filtered_data}
+
+    # Cache the data in session state
+    st.session_state.cached_pool_data = {
+        'filtered_data': filtered_data,
+        'risk_analysis': risk_analysis,
+        'timestamp': time.time()
+    }
+    
+    # Update last data fetch time
+    st.session_state.last_data_fetch = time.time()
+
+    return filtered_data, risk_analysis
 
 
 def dashboard_page(filtered_data, risk_analysis):
@@ -957,10 +971,10 @@ def dashboard_page(filtered_data, risk_analysis):
         time_filter = st.selectbox(
             "Time Range",
             ["7 Days", "30 Days", "90 Days"],
-            index=0,
+            index=1,  # Default to 30 days
             label_visibility="collapsed"
         )
-        # Store the selected timeframe in session state
+        # Store the selected timeframe in session state (doesn't trigger refresh)
         st.session_state.timeframe = time_filter
     
     if not filtered_data or not risk_analysis:
@@ -1224,7 +1238,7 @@ def pools_page(filtered_data, risk_analysis):
         return
     
     # Time window from dashboard timeframe
-    timeframe = st.session_state.get('timeframe', '7 Days')
+    timeframe = st.session_state.get('timeframe', '30 Days')
     timeframe_days = int(timeframe.split()[0])
 
     # Fetch per-pool windowed metrics (real data)
@@ -1377,6 +1391,9 @@ def lps_page(filtered_data, risk_analysis):
     if not filtered_data:
         st.warning("⚠️ No data available. Please check your configuration.")
         return
+    
+    # Get current timeframe
+    timeframe = st.session_state.get('timeframe', '30 Days')
     
     # Calculate comprehensive LP metrics
     total_tvl = sum(pool_data.get("tvl", 0) for pool_data in filtered_data.values())
@@ -2195,24 +2212,34 @@ def settings_page():
     st.subheader("Data Management")
     
     # Manual refresh button
-    if st.button("🔄 Refresh Data Now", type="primary", use_container_width=True):
-        # Clear cache to force refresh
-        if 'cached_data' in st.session_state:
-            del st.session_state.cached_data
-        st.success("Data refresh initiated!")
-        st.rerun()
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🔄 Refresh Data Now", type="primary", use_container_width=True):
+            # Clear cache to force refresh
+            keys_to_clear = ['cached_pool_data', 'last_data_fetch', 'last_settings', 'risk_data']
+            for key in keys_to_clear:
+                if key in st.session_state:
+                    del st.session_state[key]
+            st.success("Data refresh initiated!")
+            st.rerun()
+    
+    with col2:
+        if st.button("🗑️ Clear All Cache", use_container_width=True):
+            # Clear all cached data
+            keys_to_clear = ['cached_pool_data', 'last_data_fetch', 'last_settings', 'risk_data']
+            for key in keys_to_clear:
+                if key in st.session_state:
+                    del st.session_state[key]
+            st.success("Cache cleared successfully!")
+            st.rerun()
     
     # Cache status
-    if 'cached_data' in st.session_state and st.session_state.cached_data:
-        cache_count = len(st.session_state.cached_data)
-        st.info(f"📊 {cache_count} data sets cached")
-        
-        # Show cache age
-        latest_cache = max(st.session_state.cached_data.values(), key=lambda x: x.get('timestamp', 0))
-        cache_age = time.time() - latest_cache.get('timestamp', 0)
-        st.caption(f"Last updated: {int(cache_age)} seconds ago")
+    if 'cached_pool_data' in st.session_state:
+        cache_age = time.time() - st.session_state.cached_pool_data.get('timestamp', 0)
+        st.info(f"📊 Cache Status: {len(st.session_state.cached_pool_data.get('filtered_data', {}))} pools cached ({int(cache_age)}s ago)")
     else:
-        st.warning("No cached data available")
+        st.warning("⚠️ No cached data available")
     
     st.subheader("Display Settings")
     col1, col2 = st.columns(2)
@@ -2410,8 +2437,18 @@ def main():
     max_pools = st.session_state.get('max_pools', 100)
     risk_filter = st.session_state.get('risk_filter', ["Low Risk", "Medium Risk", "High Risk", "Critical Risk"])
     
-    # Get pool data (shared across pages) with caching
-    filtered_data, risk_analysis = get_pool_data(mode, min_tvl, max_pools, risk_filter, force_refresh=False)
+    # Only fetch data if we need to refresh
+    if should_refresh_data():
+        with st.spinner("🔄 Fetching real-time data..."):
+            filtered_data, risk_analysis = get_pool_data(mode, min_tvl, max_pools, risk_filter, force_refresh=False)
+    else:
+        # Use cached data
+        if 'cached_pool_data' in st.session_state:
+            filtered_data = st.session_state.cached_pool_data.get('filtered_data')
+            risk_analysis = st.session_state.cached_pool_data.get('risk_analysis')
+        else:
+            st.error("❌ No cached data available. Please refresh the data.")
+            return
     
     # Display status
     if filtered_data:

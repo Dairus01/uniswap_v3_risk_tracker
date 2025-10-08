@@ -53,11 +53,7 @@ class DynamicPoolDiscovery:
                 first: {batch_size},
                 skip: {skip},
                 orderBy: totalValueLockedUSD,
-                orderDirection: desc,
-                where: {{
-                    totalValueLockedUSD_gt: "{self.config['min_tvl_usd']}",
-                    txCount_gt: "{self.config['min_tx_count']}"
-                }}
+                orderDirection: desc
             ) {{
                 id
                 token0 {{
@@ -74,18 +70,10 @@ class DynamicPoolDiscovery:
                 }}
                 feeTier
                 liquidity
-                sqrtPrice
-                tick
                 volumeUSD
                 totalValueLockedUSD
                 txCount
                 createdAtTimestamp
-                poolDayData(first: 7, orderBy: date, orderDirection: desc) {{
-                    volumeUSD
-                    tvlUSD
-                    feesUSD
-                    date
-                }}
             }}
         }}
         """
@@ -133,9 +121,13 @@ class DynamicPoolDiscovery:
                 
         except (asyncio.TimeoutError, aiohttp.ClientError) as e:
             logger.error(f"Network error fetching pools batch: {str(e)}")
+            logger.error(f"Error type: {type(e).__name__}")
             return []
         except Exception as e:
             logger.error(f"Unexpected error fetching pools: {str(e)}")
+            logger.error(f"Error type: {type(e).__name__}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return []
     
     def _filter_pools(self, pools: List[Dict]) -> List[Dict]:
@@ -193,12 +185,8 @@ class DynamicPoolDiscovery:
             # Calculate capital efficiency
             capital_efficiency = volume_24h / tvl if tvl > 0 else 0
             
-            # Calculate volume stability from historical data
-            historical_volumes = [
-                float(day.get("volumeUSD", 0)) 
-                for day in pool.get("poolDayData", [])
-            ]
-            volume_stability = self._calculate_volume_stability(historical_volumes)
+            # Calculate volume stability (simplified without historical data)
+            volume_stability = 0.5  # Default neutral stability
             
             # Create pool symbol for identification
             token0_symbol = pool["token0"].get("symbol", "")
@@ -218,7 +206,7 @@ class DynamicPoolDiscovery:
                 "capital_efficiency": capital_efficiency,
                 "volume_stability": volume_stability,
                 "created_at": int(pool.get("createdAtTimestamp", 0)),
-                "historical_data": pool.get("poolDayData", []),
+                "historical_data": [],  # Simplified - no historical data
                 "timestamp": int(time.time())
             }
             
